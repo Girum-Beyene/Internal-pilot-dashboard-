@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { currentFinalReviews, possibleBlockerSummary } from "../src/lib/analytics";
 import { SAMPLE_FINDINGS, SAMPLE_QUICK_FINDINGS, SAMPLE_REVIEWS } from "../src/lib/fixtures";
 import { signToken, testerClaimsFromToken, verifySignedToken } from "../src/lib/server/auth";
-import { findingsForTester } from "../src/lib/tester-findings";
+import { findingsForTester, formatTesterSubmittedAt } from "../src/lib/tester-findings";
 import { POST as ingest } from "../src/app/api/kobo/rest/[form]/route";
 import { GET as attachment } from "../src/app/api/attachments/[sourceId]/route";
 
@@ -25,6 +25,11 @@ test("four-tester finding separation keeps repeated observations independent", (
     assert.ok(own.every((item) => item.testerId === testerId));
     assert.equal(new Set(own.map((item) => item.sourceId)).size, 2);
   }
+});
+
+test("tester finding dates render deterministically in the pilot time zone", () => {
+  assert.equal(formatTesterSubmittedAt("2026-08-18T12:00:00.000Z"), "18 Aug 2026, 15:00 EAT");
+  assert.equal(formatTesterSubmittedAt("not-a-date"), "Date unavailable");
 });
 
 test("current Final Review uses the latest version per tester and course without collapsing courses", () => {

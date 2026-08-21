@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { QuickFinding } from "@/lib/evidence-model";
+import { formatTesterSubmittedAt } from "@/lib/tester-findings";
 
 type CourseFilter = "all" | "hrba" | "pm";
 
@@ -15,7 +16,7 @@ export default function TesterFindings({ findings, reviewLinks }: { findings: Qu
     <p className="tester-order">Newest observations first · {visible.length} {visible.length === 1 ? "observation" : "observations"}</p>
     <div className="tester-cards">
       {visible.map((finding) => <article key={finding.id} className="tester-card">
-        <header><div><span className={`course-token ${finding.course}`}>{finding.course === "hrba" ? "HRBA" : finding.course === "pm" ? "PM" : "Learning Hub"}</span><time dateTime={finding.submittedAt}>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(finding.submittedAt))}</time></div><strong>{finding.stableId || "Location not recorded"}</strong></header>
+        <header><div><span className={`course-token ${finding.course}`}>{finding.course === "hrba" ? "HRBA" : finding.course === "pm" ? "PM" : "Learning Hub"}</span><time dateTime={finding.submittedAt}>{formatTesterSubmittedAt(finding.submittedAt)}</time></div><strong>{finding.stableId || "Location not recorded"}</strong></header>
         <dl><div><dt>Observation</dt><dd>{finding.whatHappened}</dd></div><div><dt>Recommendation</dt><dd>{finding.recommendation || "No recommendation was recorded."}</dd></div></dl>
         {finding.screenshot && <a className="screenshot-link" href={`/api/attachments/${encodeURIComponent(finding.sourceId)}`} target="_blank" rel="noreferrer"><span aria-hidden="true">▧</span><span>Open submitted screenshot</span></a>}
       </article>)}
