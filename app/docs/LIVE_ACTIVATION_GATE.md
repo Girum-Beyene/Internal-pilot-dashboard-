@@ -18,6 +18,12 @@
 - The deployed Final Review web form was independently checked with the documented `d[tester_id]` and `d[course]` parameters. It displayed its identity/course-missing warning and did not receive either hidden value. No Final Review was submitted, because doing so would create invalid readiness evidence.
 - Consequently, do not treat this as a completed end-to-end rehearsal. Do not submit additional pilot evidence through these web-form URLs until the Kobo prefill behavior is corrected and the corrected deployment is reverified. The controlled Quick record is retained and clearly identifiable for auditability; no deletion was attempted.
 
+## Prefill diagnosis — 21 August 2026
+
+- The Quick Finding deployment has a top-level hidden `tester_id`; its Collect Data entry URL is `https://ee-eu.kobotoolbox.org/a8OBAHax` (the `/x/` URL is the offline-capable route). Direct prefill at the Collect Data URL succeeds.
+- The Final Review deployment has hidden `tester_id` and `course` within `sec_a`, not at the form root. Its Collect Data entry URL is `https://ee-eu.kobotoolbox.org/61nQdMoN`; the correct deployed prefill keys are `d[sec_a/tester_id]` and `d[sec_a/course]`. Direct qualified prefill succeeds and activates the PM branch.
+- The dashboard link builder is corrected to preserve existing query parameters, convert an accidental Kobo `/x/` URL to the data-entry route, and use the deployed `sec_a` names. No XLSForm revision or redeployment is required.
+
 ## Frozen baseline
 
 - Workspace: `D:\Internal-pilot-dashboard`; application: `D:\Internal-pilot-dashboard\app`.

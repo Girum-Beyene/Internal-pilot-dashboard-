@@ -12,7 +12,7 @@ Quick Finding v2.1 intentionally contains no participant blocker/category/device
 
 ### Final Review deployment — content hash `f7f600283e56609bde2ab45837d1cee4dbc30856`
 
-All 203 authoritative v2.1 named rows match the deployment. `tester_id` and `course` are hidden and required; `review_key` remains `concat(${tester_id}, '-', ${course})`; course codes remain `hrba`, `pm`. Hub prefilling of both `d[tester_id]` and `d[course]` is required.
+All 203 authoritative v2.1 named rows match the deployment. `tester_id` and `course` are hidden and required inside the `sec_a` group; `review_key` remains `concat(${tester_id}, '-', ${course})`; course codes remain `hrba`, `pm`. The deployed Collect Data URL therefore requires `d[sec_a/tester_id]` and `d[sec_a/course]` (not unqualified keys). This corrects the earlier audit wording, which incorrectly described those two fields as top-level.
 
 All B01–B16 practical XML names, assigned-check relevance, `pass`, `pass_issue`, `fail`, `not_tested`, critical NOT TESTED explanation logic, Quality Judgment XML names/codes, action codes and readiness codes match. HRBA fields remain inside `sec_e_hrba` with `${course} = 'hrba'`; PM fields remain inside `sec_e_pm` with `${course} = 'pm'`.
 

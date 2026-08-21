@@ -26,8 +26,13 @@ export function formatTesterSubmittedAt(submittedAt: string) {
 export function buildFinalReviewUrl(formUrl: string | undefined, testerId: string, course: "hrba" | "pm", returnUrl?: string) {
   if (!formUrl) return null;
   const url = new URL(formUrl);
-  url.searchParams.set("d[tester_id]", testerId);
-  url.searchParams.set("d[course]", course);
+  // Kobo's `/x/` URL is the offline-capable form. Use the deployed Collect
+  // Data entry route so hidden-field URL prefills are honored.
+  const offlineMatch = url.pathname.match(/^\/x\/([^/]+)$/);
+  if (offlineMatch) url.pathname = `/${offlineMatch[1]}`;
+  // Final Review keeps its identity fields inside the sec_a group.
+  url.searchParams.set("d[sec_a/tester_id]", testerId);
+  url.searchParams.set("d[sec_a/course]", course);
   if (returnUrl) url.searchParams.set("return_url", returnUrl);
   return url.toString();
 }

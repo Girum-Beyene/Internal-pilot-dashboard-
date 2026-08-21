@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { currentFinalReviews, possibleBlockerSummary } from "../src/lib/analytics";
 import { SAMPLE_FINDINGS, SAMPLE_QUICK_FINDINGS, SAMPLE_REVIEWS } from "../src/lib/fixtures";
 import { signToken, testerClaimsFromToken, verifySignedToken } from "../src/lib/server/auth";
-import { findingsForTester, formatTesterSubmittedAt } from "../src/lib/tester-findings";
+import { buildFinalReviewUrl, findingsForTester, formatTesterSubmittedAt } from "../src/lib/tester-findings";
 import { POST as ingest } from "../src/app/api/kobo/rest/[form]/route";
 import { GET as attachment } from "../src/app/api/attachments/[sourceId]/route";
 import { GET as evidence } from "../src/app/api/evidence/route";
@@ -39,6 +39,17 @@ test("four-tester finding separation keeps repeated observations independent", (
 test("tester finding dates render deterministically in the pilot time zone", () => {
   assert.equal(formatTesterSubmittedAt("2026-08-18T12:00:00.000Z"), "18 Aug 2026, 15:00 EAT");
   assert.equal(formatTesterSubmittedAt("not-a-date"), "Date unavailable");
+});
+
+test("Final Review links use Kobo data-entry URLs and the deployed sec_a prefill paths", () => {
+  const result = buildFinalReviewUrl("https://ee-eu.kobotoolbox.org/x/61nQdMoN?lang=en", "CONTROLLED_TESTER_001", "pm", "https://dashboard.example/my-findings");
+  const url = new URL(result!);
+  assert.equal(url.pathname, "/61nQdMoN");
+  assert.equal(url.searchParams.get("lang"), "en");
+  assert.equal(url.searchParams.get("d[sec_a/tester_id]"), "CONTROLLED_TESTER_001");
+  assert.equal(url.searchParams.get("d[sec_a/course]"), "pm");
+  assert.equal(url.searchParams.get("return_url"), "https://dashboard.example/my-findings");
+  assert.equal(url.searchParams.has("d[tester_id]"), false);
 });
 
 test("current Final Review uses the latest version per tester and course without collapsing courses", () => {
