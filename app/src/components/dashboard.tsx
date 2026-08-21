@@ -7,11 +7,19 @@ import { useEffect, useMemo, useState } from "react";
 import { allReadiness, countPractical, countQuality, percent, possibleBlockerSummary } from "@/lib/analytics";
 import { DashboardEvidence, emptyDashboardEvidence } from "@/lib/dashboard-evidence";
 import { COURSE_LABELS, Course, DECISION_HORIZONS, FinalReview, Finding, FindingStatus, HumanReadinessDecision, PRACTICAL_CHECKS, PRACTICAL_RESULTS, QUALITY_INDICATORS, QUALITY_RATINGS, QualitativeEvidence, QuickFinding, READINESS_DECISIONS } from "@/lib/evidence-model";
+import { readinessDisplayLabel } from "@/lib/readiness-presentation";
 
 const views = [
   ["overview", "Pilot Overview", "OV"], ["coverage", "Coverage & Progress", "CP"], ["practical", "Practical Checks", "PC"], ["quality", "Quality Review", "QR"],
   ["learning", "Learning & Better Decisions", "LD"], ["transfer", "Context, Application & Transfer", "CT"], ["findings", "Findings & Blockers", "FB"],
   ["actions", "Finding-to-Action", "FA"], ["qualitative", "Qualitative Evidence", "QE"], ["readiness", "Readiness & Decision Record", "RD"],
+] as const;
+
+const navigationGroups = [
+  ["Overview", ["overview"]],
+  ["Evidence", ["coverage", "practical", "quality", "learning", "transfer", "qualitative"]],
+  ["Findings & Actions", ["findings", "actions"]],
+  ["Readiness", ["readiness"]],
 ] as const;
 
 const viewDescriptions: Record<string, string> = {
@@ -40,7 +48,9 @@ function toneForDecision(value: string) {
 }
 
 function StatusPill({ children, tone }: { children: React.ReactNode; tone?: string }) {
-  return <span className={`status-pill ${tone ?? toneForDecision(String(children))}`}><span aria-hidden="true" className="status-dot" />{children}</span>;
+  const value = String(children);
+  const display = (READINESS_DECISIONS as readonly string[]).includes(value) ? readinessDisplayLabel(value as (typeof READINESS_DECISIONS)[number]) : children;
+  return <span className={`status-pill ${tone ?? toneForDecision(value)}`}><span aria-hidden="true" className="status-dot" />{display}</span>;
 }
 
 function StackedBar({ values, labels, total, onOpen }: { values: number[]; labels: string[]; total: number; onOpen?: () => void }) {
@@ -120,9 +130,9 @@ export default function Dashboard({ view, mode, initialEvidence = emptyDashboard
     <aside className={`sidebar ${mobileNav ? "open" : ""}`} aria-label="Primary navigation">
       <div className="brand"><Image src="/dec-logo.png" alt="Development Expertise Center" width={92} height={50} priority /><button className="nav-close" onClick={() => setMobileNav(false)} aria-label="Close navigation">×</button></div>
       <div className="product-name"><strong>Internal Pilot</strong><span>Analytics & decisions</span></div>
-      <nav>{views.map(([href, label, code], index) => <Link key={href} href={href === "overview" ? (routePrefix || "/") : `${routePrefix}/${href}`} className={current === href ? "active" : ""} onClick={() => setMobileNav(false)}>
-        <span className="nav-icon" aria-hidden="true">{code}</span><span>{label}</span>{index === 0 && <span className="nav-live">{simulation ? "SIM" : "REAL"}</span>}
-      </Link>)}</nav>
+      <nav>{navigationGroups.map(([group, members]) => <div className="nav-group" key={group}><p>{group}</p>{members.map((href) => { const [viewId, label, code] = views.find((item) => item[0] === href)!; return <Link key={viewId} href={viewId === "overview" ? (routePrefix || "/") : `${routePrefix}/${viewId}`} className={current === viewId ? "active" : ""} onClick={() => setMobileNav(false)}>
+        <span className="nav-icon" aria-hidden="true">{code}</span><span>{label}</span>{viewId === "overview" && <span className="nav-live">{simulation ? "SIM" : "REAL"}</span>}
+      </Link>; })}</div>)}</nav>
       <div className="sidebar-note"><span className="pulse" />Internal DEC workspace<small>Selected-CSO pilot horizon</small></div>
     </aside>
     <div className="workspace">
@@ -169,14 +179,17 @@ function Overview({ readiness, reviews, findings, openReviews, openDrawer, route
   const unresolved = findings.filter((f: Finding) => f.severity === "Critical" && !["Verified Closed", "Not an Issue"].includes(f.status));
   const blockerReports = possibleBlockerSummary(reviews, findings);
   const high = findings.filter((f: Finding) => f.priority === "High" && !["Verified Closed", "Not an Issue"].includes(f.status) && ["During internal pilot", "Before selected-CSO pilot"].includes(f.decisionHorizon));
+  const priorityActions = findings.filter((f: Finding) => !["Verified Closed", "Not an Issue"].includes(f.status) && ["During internal pilot", "Before selected-CSO pilot"].includes(f.decisionHorizon)).sort((a: Finding, b: Finding) => ({ Critical: 0, High: 1, Medium: 2, Low: 3 }[a.severity] - { Critical: 0, High: 1, Medium: 2, Low: 3 }[b.severity]));
+  const priorityAction = priorityActions[0];
   const applicable = reviews.flatMap((r: any) => r.practical).filter((p: any) => p.applicable);
   const tested = applicable.filter((p: any) => p.result !== "NOT TESTED").length;
+  const reviewers = new Set(reviews.map((r: FinalReview) => r.testerId)).size;
   return <>
     <section className="readiness-grid" aria-labelledby="readiness-title"><div className="section-title full"><div><p className="eyebrow">EVIDENCE SIGNALS</p><h2 id="readiness-title">Ready for the selected-CSO pilot?</h2></div><Link href={`${routePrefix}/readiness`}>Open decision record →</Link></div>
-      {readiness.map((s: any) => <article key={s.course} className={`readiness-card ${toneForDecision(s.decision)}`}><div className="card-top"><span className="system-mark">{s.course === "hub" ? "LH" : s.course.toUpperCase()}</span><StatusPill>{s.decision.replace(" - CORRECT IMPORTANT ISSUE(S) FIRST", "").replace(" - NEED MORE TESTING", "")}</StatusPill></div><h3>{s.label}</h3><p>{s.reason}</p><dl><div><dt>Final reviews</dt><dd>{s.finalReviews}</dd></div><div><dt>Unresolved critical</dt><dd>{s.unresolvedCritical}</dd></div><div><dt>Evidence gaps</dt><dd>{s.criticalGaps.length}</dd></div></dl></article>)}
+      {readiness.map((s: any) => <article key={s.course} className={`readiness-card ${toneForDecision(s.decision)}`}><div className="card-top"><span className="system-mark">{s.course === "hub" ? "LH" : s.course.toUpperCase()}</span><StatusPill>{readinessDisplayLabel(s.decision)}</StatusPill></div><h3>{s.label}</h3><p>{s.reason}</p><dl><div><dt>Final reviews</dt><dd>{s.finalReviews}</dd></div><div><dt>Unresolved critical</dt><dd>{s.unresolvedCritical}</dd></div><div><dt>Evidence gaps</dt><dd>{s.criticalGaps.length}</dd></div></dl></article>)}
     </section>
     <section className="metric-grid" aria-label="Pilot evidence summary">
-      <Metric label="Final Reviews received" value={reviews.length} detail="across filtered evidence" onClick={() => openReviews("Final Reviews received")} />
+      <Metric label="Final Reviews received" value={reviews.length} detail={`${reviews.length} review(s) from ${reviewers} reviewer(s)`} onClick={() => openReviews("Final Reviews received")} />
       <Metric label="Practical-check coverage" value={percent(tested, applicable.length)} detail={`${tested} tested of ${applicable.length} assigned`} tone="teal" onClick={() => openDrawer({ title: "Practical evidence coverage", rows: reviews.map((r: any) => ({ id: r.id, meta: `${r.testerId} · ${COURSE_LABELS[r.course as Course]}`, text: `${r.practical.filter((p: any) => p.applicable && p.result !== "NOT TESTED").length} assigned checks tested`, source: r.sourceId })) })} />
       <Metric label="Unresolved critical issues" value={unresolved.length} detail="verified closed excluded" tone="red" onClick={() => openDrawer({ title: "Unresolved critical issues", rows: unresolved.map((f: Finding) => ({ id: f.id, meta: `${COURSE_LABELS[f.course]} · ${f.status}`, text: f.evidence, source: f.sourceRecordIds.join(", ") })) })} />
       <Metric label="Unresolved possible blockers" value={blockerReports.unresolved.length} detail={`${blockerReports.historical.length} explicit Final Review report(s) · ${blockerReports.closedCount} closed/not issue`} tone="amber" onClick={() => openDrawer({ title: "Unresolved explicit possible blocker reports", rows: blockerReports.unresolved.map((r: FinalReview) => ({ id: r.id, meta: `${COURSE_LABELS[r.course]} · ${r.possibleBlocker.replace("_", " ")}`, text: r.qualitative.find((e) => e.sourceField === "j_blocker_explain")?.excerpt ?? "Explicit possible-blocker response recorded in Final Review.", source: r.sourceId })) })} />
@@ -184,7 +197,7 @@ function Overview({ readiness, reviews, findings, openReviews, openDrawer, route
     </section>
     <section className="two-column">
       <DecisionHorizon findings={findings} routePrefix={routePrefix} />
-      <article className="panel"><div className="section-title"><div><p className="eyebrow">DEC ACTION QUEUE</p><h2>What needs attention now?</h2></div><Link href={`${routePrefix}/actions`}>All actions →</Link></div><div className="priority-list">{high.map((f: Finding) => <div key={f.id}><span className={`priority-flag ${f.severity.toLowerCase()}`}>{f.severity}</span><div><strong>{f.id} · {f.domain}</strong><p>{f.recommendedAction}</p><small>{COURSE_LABELS[f.course]} · {f.owner} · {f.status}</small></div></div>)}{high.length === 0 && <Empty title="No high actions in this filter" text="Waiting for evidence before DEC can assign or verify an action." />}</div></article>
+      <article className="panel"><div className="section-title"><div><p className="eyebrow">PRIORITY ACTIONS · BEFORE SELECTED-CSO PILOT</p><h2>What needs attention now?</h2></div><Link href={`${routePrefix}/actions`}>All actions →</Link></div><div className="priority-list">{priorityAction ? <div><span className={`priority-flag ${priorityAction.severity.toLowerCase()}`}>{priorityAction.severity}</span><div><strong>{priorityAction.id} · {priorityAction.domain}</strong><p>{priorityAction.recommendedAction}</p><small>Status: {priorityAction.status} · Owner: {priorityAction.owner || "Unassigned"} · Next: {priorityAction.targetTiming || priorityAction.decisionHorizon}</small></div></div> : <Empty title="No priority action recorded" text="Waiting for evidence before DEC can assign or verify an action." />}</div></article>
     </section>
     <section className="decision-questions"><h2>Five questions for the next decision</h2>{[
       ["Do we have enough evidence?", readiness.some((s: any) => s.criticalGaps.length) ? "Critical gaps remain" : "Critical checks have evidence", "readiness"],
