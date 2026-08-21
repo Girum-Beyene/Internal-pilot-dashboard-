@@ -7,14 +7,23 @@ import { signToken, testerClaimsFromToken, verifySignedToken } from "../src/lib/
 import { findingsForTester, formatTesterSubmittedAt } from "../src/lib/tester-findings";
 import { POST as ingest } from "../src/app/api/kobo/rest/[form]/route";
 import { GET as attachment } from "../src/app/api/attachments/[sourceId]/route";
+import { GET as evidence } from "../src/app/api/evidence/route";
 
 test("signed tester identity rejects tampering and expired tokens", () => {
   const secret = "test-secret-with-sufficient-entropy";
   const token = signToken({ aud: "dec-tester", tester_id: "T-A", courses: ["hrba"] }, secret);
   assert.equal(verifySignedToken(token, secret, "dec-tester")?.tester_id, "T-A");
-  assert.equal(verifySignedToken(`${token.slice(0, -1)}x`, secret, "dec-tester"), null);
+  const [header, payload, signature] = token.split(".");
+  const tampered = `${header}.${payload}.${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
+  assert.equal(verifySignedToken(tampered, secret, "dec-tester"), null);
   const expired = signToken({ aud: "dec-tester", tester_id: "T-A", exp: Math.floor(Date.now() / 1000) - 1 }, secret);
   assert.equal(verifySignedToken(expired, secret, "dec-tester"), null);
+});
+
+test("public real dashboard receives a zero-evidence envelope without dec_pilot records", async () => {
+  const response = await evidence(new NextRequest("https://app.example/api/evidence"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { reviews: [], quick: [], findings: [], sample: false, archivedReviewVersions: 0, lastSync: null, access: "Internal DEC access required for pilot evidence." });
 });
 
 test("four-tester finding separation keeps repeated observations independent", () => {

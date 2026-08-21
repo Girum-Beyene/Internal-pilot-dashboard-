@@ -12,7 +12,9 @@ const readinessMap = Object.fromEntries(["ready", "ready_minor", "hold", "insuff
 const evidenceKinds = new Set(["KEEP", "Priority Improvement", "Possible Blocker", "Difficult Activity", "Best Decision Activity", "Workplace Use", "Support Need", "Recommendation"]);
 
 export async function GET(request: NextRequest) {
-  if (!authorizedInternal(request)) return NextResponse.json({ error: "Internal DEC access required." }, { status: 401 });
+  // The public real dashboard may render its zero-data shell before an analyst
+  // session exists. Return no rows rather than exposing any dec_pilot record.
+  if (!authorizedInternal(request)) return NextResponse.json({ reviews: [], quick: [], findings: [], sample: false, archivedReviewVersions: 0, lastSync: null, access: "Internal DEC access required for pilot evidence." });
   try {
     const [reviewRows, practicalRows, qualityRows, textRows, quickRows, findingRows, sourceRows, syncRows] = await Promise.all([
       getRows("final_reviews"), getRows("practical_checks"), getRows("quality_ratings"), getRows("qualitative_evidence"), getRows("quick_findings"), getRows("findings"), getRows("finding_sources"), getRows("sync_runs", "select=completed_at,status,error_message&order=completed_at.desc&limit=1"),

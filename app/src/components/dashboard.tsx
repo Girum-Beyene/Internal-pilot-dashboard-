@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { allReadiness, countPractical, countQuality, percent, possibleBlockerSummary } from "@/lib/analytics";
-import { SAMPLE_FINDINGS, SAMPLE_QUICK_FINDINGS, SAMPLE_REVIEWS } from "@/lib/fixtures";
+import { DashboardEvidence, emptyDashboardEvidence } from "@/lib/dashboard-evidence";
 import { COURSE_LABELS, Course, DECISION_HORIZONS, FinalReview, Finding, FindingStatus, HumanReadinessDecision, PRACTICAL_CHECKS, PRACTICAL_RESULTS, QUALITY_INDICATORS, QUALITY_RATINGS, QualitativeEvidence, QuickFinding, READINESS_DECISIONS } from "@/lib/evidence-model";
 
 const views = [
@@ -57,35 +57,36 @@ function Metric({ label, value, detail, tone = "blue", onClick }: { label: strin
   return onClick ? <button className="metric" onClick={onClick}>{content}<span className="drill">View evidence →</span></button> : <div className="metric">{content}</div>;
 }
 
-export default function Dashboard({ view }: { view: string }) {
+export default function Dashboard({ view, mode, initialEvidence = emptyDashboardEvidence() }: { view: string; mode: "real" | "simulation"; initialEvidence?: DashboardEvidence }) {
   const current = views.some((v) => v[0] === view) ? view : "overview";
-  const liveMode = process.env.NEXT_PUBLIC_DATA_MODE === "live";
+  const simulation = mode === "simulation";
+  const routePrefix = simulation ? "/simulation" : "";
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [mobileNav, setMobileNav] = useState(false);
   const [drawer, setDrawer] = useState<{ title: string; rows: DrawerRow[] } | null>(null);
-  const [findings, setFindings] = useState<Finding[]>(liveMode ? [] : SAMPLE_FINDINGS);
-  const [sync, setSync] = useState(liveMode ? { state: "Loading live evidence…", time: "Not yet confirmed" } : { state: "Fixture mode", time: "18 Aug 2026, 16:12 EAT" });
-  const [sourceReviews, setSourceReviews] = useState<FinalReview[]>(liveMode ? [] : SAMPLE_REVIEWS);
-  const [sourceQuick, setSourceQuick] = useState<QuickFinding[]>(liveMode ? [] : SAMPLE_QUICK_FINDINGS);
+  const [findings, setFindings] = useState<Finding[]>(initialEvidence.findings);
+  const [sync, setSync] = useState(simulation ? { state: "Simulation dataset", time: "Synthetic review evidence" } : { state: "Waiting for submissions", time: "No pilot evidence received yet" });
+  const [sourceReviews, setSourceReviews] = useState<FinalReview[]>(initialEvidence.reviews);
+  const [sourceQuick, setSourceQuick] = useState<QuickFinding[]>(initialEvidence.quick);
 
   useEffect(() => {
-    if (liveMode) {
+    if (!simulation) {
       fetch("/api/evidence").then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? "Evidence load failed");
         setSourceReviews(data.reviews); setSourceQuick(data.quick); setFindings(data.findings);
-        setSync({ state: data.lastSync?.status === "success" ? "Synced" : "Degraded", time: data.lastSync?.completed_at ? new Date(data.lastSync.completed_at).toLocaleString() : "Never" });
-      }).catch(() => setSync({ state: "Live data unavailable", time: "Unknown" }));
+        setSync({ state: data.lastSync?.status === "success" ? "Evidence store checked" : "Waiting for submissions", time: data.lastSync?.completed_at ? new Date(data.lastSync.completed_at).toLocaleString() : "No pilot evidence received yet" });
+      }).catch(() => setSync({ state: "Waiting for submissions", time: "No pilot evidence received yet" }));
     } else {
-      const stored = window.localStorage.getItem("dec-pilot-findings");
+      const stored = window.localStorage.getItem("dec-pilot-simulation-findings");
       if (stored) try { setFindings(JSON.parse(stored)); } catch { /* ignore invalid local development state */ }
     }
-  }, [liveMode]);
+  }, [simulation]);
 
   const saveFindings = (next: Finding[]) => {
     setFindings(next);
-    if (liveMode) void fetch("/api/findings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next), keepalive: true });
-    else window.localStorage.setItem("dec-pilot-findings", JSON.stringify(next));
+    if (!simulation) void fetch("/api/findings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next), keepalive: true });
+    else window.localStorage.setItem("dec-pilot-simulation-findings", JSON.stringify(next));
   };
 
   const reviews = useMemo(() => sourceReviews.filter((r) =>
@@ -98,14 +99,16 @@ export default function Dashboard({ view }: { view: string }) {
   const filteredFindings = findings.filter((f) => (filters.course === "all" || f.course === filters.course) && (filters.horizon === "all" || f.decisionHorizon === filters.horizon));
 
   async function refresh() {
+    if (simulation) { setSync({ state: "Simulation dataset", time: "Synthetic review evidence" }); return; }
     setSync({ state: "Refreshing…", time: sync.time });
     try {
-      const response = await fetch("/api/sync", { method: "POST" });
+      const response = await fetch("/api/evidence");
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Sync failed");
-      setSync({ state: "Synced", time: new Date().toLocaleString() });
+      if (!response.ok) throw new Error(body.error ?? "Evidence load failed");
+      setSourceReviews(body.reviews); setSourceQuick(body.quick); setFindings(body.findings);
+      setSync({ state: body.lastSync?.status === "success" ? "Evidence store checked" : "Waiting for submissions", time: body.lastSync?.completed_at ? new Date(body.lastSync.completed_at).toLocaleString() : "No pilot evidence received yet" });
     } catch {
-      setSync({ state: liveMode ? "Live refresh failed · existing live data retained" : "Refresh unavailable in fixture mode", time: sync.time });
+      setSync({ state: "Waiting for submissions", time: sync.time });
     }
   }
 
@@ -117,8 +120,8 @@ export default function Dashboard({ view }: { view: string }) {
     <aside className={`sidebar ${mobileNav ? "open" : ""}`} aria-label="Primary navigation">
       <div className="brand"><Image src="/dec-logo.png" alt="Development Expertise Center" width={92} height={50} priority /><button className="nav-close" onClick={() => setMobileNav(false)} aria-label="Close navigation">×</button></div>
       <div className="product-name"><strong>Internal Pilot</strong><span>Analytics & decisions</span></div>
-      <nav>{views.map(([href, label, code], index) => <Link key={href} href={href === "overview" ? "/" : `/${href}`} className={current === href ? "active" : ""} onClick={() => setMobileNav(false)}>
-        <span className="nav-icon" aria-hidden="true">{code}</span><span>{label}</span>{index === 0 && <span className="nav-live">{liveMode ? "LIVE" : "TEST"}</span>}
+      <nav>{views.map(([href, label, code], index) => <Link key={href} href={href === "overview" ? (routePrefix || "/") : `${routePrefix}/${href}`} className={current === href ? "active" : ""} onClick={() => setMobileNav(false)}>
+        <span className="nav-icon" aria-hidden="true">{code}</span><span>{label}</span>{index === 0 && <span className="nav-live">{simulation ? "SIM" : "REAL"}</span>}
       </Link>)}</nav>
       <div className="sidebar-note"><span className="pulse" />Internal DEC workspace<small>Selected-CSO pilot horizon</small></div>
     </aside>
@@ -126,14 +129,14 @@ export default function Dashboard({ view }: { view: string }) {
       <header className="topbar">
         <button className="menu-button" onClick={() => setMobileNav(true)} aria-label="Open navigation">☰</button>
         <div className="sync-state"><span className="sync-label">Last synced</span><strong>{sync.time}</strong><span>{sync.state}</span></div>
-        <button className="refresh-button" onClick={refresh} disabled={sync.state === "Refreshing…"}><span aria-hidden="true">↻</span>{sync.state === "Refreshing…" ? "Refreshing" : "Refresh now"}</button>
+        <button className="refresh-button" onClick={refresh} disabled={sync.state === "Refreshing…"}><span aria-hidden="true">↻</span>{sync.state === "Refreshing…" ? "Refreshing" : simulation ? "Simulation source" : "Check evidence"}</button>
         <div className="user-chip" aria-label="Signed in as DEC Analyst"><span>DA</span><div><strong>DEC Analyst</strong><small>Internal access</small></div></div>
       </header>
       <main id="main-content" className="main">
-        {!liveMode && <div className="sample-banner" role="status"><strong>SAMPLE DATA</strong><span>Removable development fixtures are shown. No live pilot result is represented.</span></div>}
+        {simulation ? <div className="sample-banner simulation-banner" role="status"><strong>SIMULATION — SYNTHETIC EVIDENCE</strong><span>Isolated fixture and AI-review evidence only. It never writes to Kobo or the real dec_pilot evidence store.</span></div> : <div className="zero-banner" role="status"><strong>REAL PILOT EVIDENCE</strong><span>{sourceReviews.length || sourceQuick.length || findings.length ? "Displaying evidence received in the DEC pilot store." : "No pilot evidence received yet. Dashboard modules remain ready for DEC submissions."}</span></div>}
         <section className="page-heading"><div><p className="eyebrow">DEC CSO LEARNING HUB · INTERNAL PILOT</p><h1>{views.find((v) => v[0] === current)?.[1]}</h1><p>{viewDescriptions[current]}</p></div><div className="stage-chip"><span>Decision horizon</span><strong>Selected-CSO pilot</strong></div></section>
         <FilterBar filters={filters} reviews={sourceReviews} onChange={setFilters} onReset={() => setFilters(emptyFilters)} />
-        {current === "overview" && <Overview readiness={readiness} reviews={reviews} findings={filteredFindings} openReviews={openReviews} openDrawer={setDrawer} />}
+        {current === "overview" && <Overview readiness={readiness} reviews={reviews} findings={filteredFindings} openReviews={openReviews} openDrawer={setDrawer} routePrefix={routePrefix} />}
         {current === "coverage" && <Coverage reviews={reviews} quick={quick} openDrawer={setDrawer} />}
         {current === "practical" && <Practical reviews={reviews} openDrawer={setDrawer} />}
         {current === "quality" && <Quality reviews={reviews} openDrawer={setDrawer} />}
@@ -142,7 +145,7 @@ export default function Dashboard({ view }: { view: string }) {
         {current === "findings" && <Findings reviews={reviews} quick={quick} findings={filteredFindings} openDrawer={setDrawer} />}
         {current === "actions" && <Actions findings={filteredFindings} save={(changed) => saveFindings(findings.map((f) => f.id === changed.id ? changed : f))} />}
         {current === "qualitative" && <Qualitative reviews={reviews} promote={(e: QualitativeEvidence) => promote(e, findings, saveFindings)} />}
-        {current === "readiness" && <Readiness signals={readiness} findings={findings} liveMode={liveMode} />}
+        {current === "readiness" && <Readiness signals={readiness} findings={findings} realMode={!simulation} />}
       </main>
       <footer><Image src="/partner-logos.png" alt="DEC programme partners" width={440} height={56} /><span>Internal pilot decision support · Evidence, action and human judgment remain separate</span></footer>
     </div>
@@ -162,14 +165,14 @@ function FilterBar({ filters, reviews, onChange, onReset }: { filters: Filters; 
   </section>;
 }
 
-function Overview({ readiness, reviews, findings, openReviews, openDrawer }: any) {
+function Overview({ readiness, reviews, findings, openReviews, openDrawer, routePrefix }: any) {
   const unresolved = findings.filter((f: Finding) => f.severity === "Critical" && !["Verified Closed", "Not an Issue"].includes(f.status));
   const blockerReports = possibleBlockerSummary(reviews, findings);
   const high = findings.filter((f: Finding) => f.priority === "High" && !["Verified Closed", "Not an Issue"].includes(f.status) && ["During internal pilot", "Before selected-CSO pilot"].includes(f.decisionHorizon));
   const applicable = reviews.flatMap((r: any) => r.practical).filter((p: any) => p.applicable);
   const tested = applicable.filter((p: any) => p.result !== "NOT TESTED").length;
   return <>
-    <section className="readiness-grid" aria-labelledby="readiness-title"><div className="section-title full"><div><p className="eyebrow">EVIDENCE SIGNALS</p><h2 id="readiness-title">Ready for the selected-CSO pilot?</h2></div><Link href="/readiness">Open decision record →</Link></div>
+    <section className="readiness-grid" aria-labelledby="readiness-title"><div className="section-title full"><div><p className="eyebrow">EVIDENCE SIGNALS</p><h2 id="readiness-title">Ready for the selected-CSO pilot?</h2></div><Link href={`${routePrefix}/readiness`}>Open decision record →</Link></div>
       {readiness.map((s: any) => <article key={s.course} className={`readiness-card ${toneForDecision(s.decision)}`}><div className="card-top"><span className="system-mark">{s.course === "hub" ? "LH" : s.course.toUpperCase()}</span><StatusPill>{s.decision.replace(" - CORRECT IMPORTANT ISSUE(S) FIRST", "").replace(" - NEED MORE TESTING", "")}</StatusPill></div><h3>{s.label}</h3><p>{s.reason}</p><dl><div><dt>Final reviews</dt><dd>{s.finalReviews}</dd></div><div><dt>Unresolved critical</dt><dd>{s.unresolvedCritical}</dd></div><div><dt>Evidence gaps</dt><dd>{s.criticalGaps.length}</dd></div></dl></article>)}
     </section>
     <section className="metric-grid" aria-label="Pilot evidence summary">
@@ -180,16 +183,16 @@ function Overview({ readiness, reviews, findings, openReviews, openDrawer }: any
       <Metric label="High actions due before next stage" value={high.length} detail="open · now or before selected-CSO" tone="navy" onClick={() => openDrawer({ title: "High-priority actions due", rows: high.map((f: Finding) => ({ id: f.id, meta: `${f.owner} · ${f.decisionHorizon}`, text: f.recommendedAction })) })} />
     </section>
     <section className="two-column">
-      <DecisionHorizon findings={findings} />
-      <article className="panel"><div className="section-title"><div><p className="eyebrow">DEC ACTION QUEUE</p><h2>What needs attention now?</h2></div><Link href="/actions">All actions →</Link></div><div className="priority-list">{high.map((f: Finding) => <div key={f.id}><span className={`priority-flag ${f.severity.toLowerCase()}`}>{f.severity}</span><div><strong>{f.id} · {f.domain}</strong><p>{f.recommendedAction}</p><small>{COURSE_LABELS[f.course]} · {f.owner} · {f.status}</small></div></div>)}{high.length === 0 && <Empty title="No high actions in this filter" text="This is not evidence of readiness; review coverage and evidence gaps." />}</div></article>
+      <DecisionHorizon findings={findings} routePrefix={routePrefix} />
+      <article className="panel"><div className="section-title"><div><p className="eyebrow">DEC ACTION QUEUE</p><h2>What needs attention now?</h2></div><Link href={`${routePrefix}/actions`}>All actions →</Link></div><div className="priority-list">{high.map((f: Finding) => <div key={f.id}><span className={`priority-flag ${f.severity.toLowerCase()}`}>{f.severity}</span><div><strong>{f.id} · {f.domain}</strong><p>{f.recommendedAction}</p><small>{COURSE_LABELS[f.course]} · {f.owner} · {f.status}</small></div></div>)}{high.length === 0 && <Empty title="No high actions in this filter" text="Waiting for evidence before DEC can assign or verify an action." />}</div></article>
     </section>
     <section className="decision-questions"><h2>Five questions for the next decision</h2>{[
       ["Do we have enough evidence?", readiness.some((s: any) => s.criticalGaps.length) ? "Critical gaps remain" : "Critical checks have evidence", "readiness"],
       ["Is anything blocking?", unresolved.length ? `${unresolved.length} unresolved critical issue` : "No unresolved confirmed blocker", "findings"],
-      ["Where is experience fragile?", "Mobile navigation and PM progression", "quality"],
+      ["Where is experience fragile?", reviews.length ? "Review quality evidence by domain" : "Waiting for quality evidence", "quality"],
       ["What must DEC act on?", `${high.length} high action(s) due now/before next stage`, "actions"],
       ["What can wait?", `${findings.filter((f: Finding) => ["Validate during selected-CSO pilot", "Before wider release", "Later programme / phase"].includes(f.decisionHorizon)).length} item(s) beyond immediate horizon`, "actions"],
-    ].map(([q, a, link]) => <Link href={`/${link}`} key={q}><span>{q}</span><strong>{a}</strong><b aria-hidden="true">→</b></Link>)}</section>
+    ].map(([q, a, link]) => <Link href={`${routePrefix}/${link}`} key={q}><span>{q}</span><strong>{a}</strong><b aria-hidden="true">→</b></Link>)}</section>
   </>;
 }
 
@@ -197,7 +200,7 @@ function Coverage({ reviews, quick, openDrawer }: any) {
   const testers = [...new Set(reviews.map((r: any) => r.testerId))];
   return <><section className="metric-grid"><Metric label="Testers with reviews" value={testers.length} detail="unique tester identifiers" /><Metric label="HRBA reviews" value={reviews.filter((r: any) => r.course === "hrba").length} detail="course-level evidence" tone="teal" /><Metric label="PM reviews" value={reviews.filter((r: any) => r.course === "pm").length} detail="course-level evidence" tone="green" /><Metric label="Quick Findings" value={quick.length} detail="repeated observation submissions" tone="amber" /></section>
 <section className="panel"><div className="section-title"><div><p className="eyebrow">TESTING PROGRESS</p><h2>Evidence receipt by tester</h2></div><span className="method-note">Coordination evidence only</span></div><div className="table-wrap"><table><thead><tr><th>Tester</th><th>Assigned course</th><th>Device</th><th>Completion</th><th>Quick Findings</th><th>Final Review</th><th>Special checks</th></tr></thead><tbody>{reviews.map((r: any) => <tr key={r.id}><td><button className="text-link" onClick={() => openDrawer({ title: `${r.testerId} evidence`, rows: [{ id: r.id, meta: COURSE_LABELS[r.course as Course], text: `${r.completion} on ${r.device}`, source: r.sourceId }, ...quick.filter((q: any) => q.testerId === r.testerId).map((q: any) => ({ id: q.id, meta: "Quick Finding", text: q.whatHappened, source: q.sourceId }))] })}>{r.testerId}</button></td><td>{COURSE_LABELS[r.course as Course]}</td><td>{r.device}</td><td>{r.completion}</td><td>{quick.filter((q: any) => q.testerId === r.testerId).length}</td><td><StatusPill tone="positive">Received</StatusPill></td><td>{r.practical.filter((p: any) => p.applicable && PRACTICAL_CHECKS.find((c) => c[0] === p.xmlName)?.[2] === "assigned").length || "None assigned"}</td></tr>)}</tbody></table></div></section>
-  </>;
+  {reviews.length === 0 && <Empty title="No Final Reviews received yet" text="Tester, device and completion rows will appear here when DEC pilot evidence is received." />}</>;
 }
 
 function Practical({ reviews, openDrawer }: any) {
@@ -206,7 +209,7 @@ function Practical({ reviews, openDrawer }: any) {
 
 function Quality({ reviews, openDrawer }: any) {
   const domains = [...new Set(QUALITY_INDICATORS.map((i) => i.domain))];
-  return <div className="domain-grid">{domains.map((domain) => { const items = QUALITY_INDICATORS.filter((i) => i.domain === domain && (i.appliesTo === "all" || reviews.some((r: any) => r.course === i.appliesTo))); const aggregate = items.reduce((a, i) => { const c = countQuality(reviews, i.xmlName).counts; a[0] += c["0 BLOCKED"]; a[1] += c["1 FRAGILE"]; a[2] += c["2 WORKABLE"]; a[3] += c["3 STRONG"]; a[4] += c["NOT TESTED / N/A"]; return a; }, [0, 0, 0, 0, 0]); const total = aggregate.reduce((a, b) => a + b, 0); return <section className="panel domain" key={domain}><div className="section-title"><div><p className="eyebrow">QUALITY DOMAIN</p><h2>{domain}</h2></div><strong>{total - aggregate[4]} valid</strong></div><StackedBar values={aggregate} labels={["0 BLOCKED", "1 FRAGILE", "2 WORKABLE", "3 STRONG", "NOT TESTED / N/A"]} total={total} /><div className="domain-summary"><span><b>{aggregate[0]}</b> blocked</span><span><b>{aggregate[1]}</b> fragile</span><span><b>{aggregate[2] + aggregate[3]}</b> workable/strong</span><span><b>{aggregate[4]}</b> not tested</span></div><div className="indicator-list">{items.map((i) => { const c = countQuality(reviews, i.xmlName); return <button key={i.xmlName} onClick={() => openDrawer({ title: i.label, rows: reviews.flatMap((r: any) => { const x = r.quality.find((q: any) => q.xmlName === i.xmlName); return x ? [{ id: r.id, meta: `${r.testerId} · ${x.rating}`, text: x.comment || "No comment was required for this rating.", source: r.sourceId }] : []; }) })}><span>{i.label}<code>{i.xmlName}</code></span><b>{c.valid} / {c.total}</b><StatusPill tone={c.counts["0 BLOCKED"] ? "critical" : c.counts["1 FRAGILE"] ? "attention" : c.valid ? "positive" : "neutral"}>{c.counts["0 BLOCKED"] ? "Blocked" : c.counts["1 FRAGILE"] ? "Fragile" : c.valid ? "Evidence" : "No evidence"}</StatusPill></button>; })}</div></section>; })}</div>;
+  return <div className="domain-grid">{domains.map((domain) => { const items = QUALITY_INDICATORS.filter((i) => i.domain === domain); const aggregate = items.reduce((a, i) => { const c = countQuality(reviews, i.xmlName).counts; a[0] += c["0 BLOCKED"]; a[1] += c["1 FRAGILE"]; a[2] += c["2 WORKABLE"]; a[3] += c["3 STRONG"]; a[4] += c["NOT TESTED / N/A"]; return a; }, [0, 0, 0, 0, 0]); const total = aggregate.reduce((a, b) => a + b, 0); return <section className="panel domain" key={domain}><div className="section-title"><div><p className="eyebrow">QUALITY DOMAIN</p><h2>{domain}</h2></div><strong>{total - aggregate[4]} valid</strong></div><StackedBar values={aggregate} labels={["0 BLOCKED", "1 FRAGILE", "2 WORKABLE", "3 STRONG", "NOT TESTED / N/A"]} total={total} /><div className="domain-summary"><span><b>{aggregate[0]}</b> blocked</span><span><b>{aggregate[1]}</b> fragile</span><span><b>{aggregate[2] + aggregate[3]}</b> workable/strong</span><span><b>{aggregate[4]}</b> not tested</span></div><div className="indicator-list">{items.map((i) => { const c = countQuality(reviews, i.xmlName); return <button key={i.xmlName} onClick={() => openDrawer({ title: i.label, rows: reviews.flatMap((r: any) => { const x = r.quality.find((q: any) => q.xmlName === i.xmlName); return x ? [{ id: r.id, meta: `${r.testerId} · ${x.rating}`, text: x.comment || "No comment was required for this rating.", source: r.sourceId }] : []; }) })}><span>{i.label}<code>{i.xmlName}</code></span><b>{c.valid} / {c.total}</b><StatusPill tone={c.counts["0 BLOCKED"] ? "critical" : c.counts["1 FRAGILE"] ? "attention" : c.valid ? "positive" : "neutral"}>{c.counts["0 BLOCKED"] ? "Blocked" : c.counts["1 FRAGILE"] ? "Fragile" : c.valid ? "Evidence" : "No evidence"}</StatusPill></button>; })}</div></section>; })}</div>;
 }
 
 function Learning({ reviews, openDrawer }: any) {
@@ -216,18 +219,19 @@ function Learning({ reviews, openDrawer }: any) {
 function Transfer({ reviews, promote }: any) {
   const evidence = reviews.flatMap((r: any) => r.qualitative).filter((e: any) => ["Workplace Use", "Best Decision Activity"].includes(e.kind));
   const supports = ["Practical tool/template", "Peer-learning session", "Coaching/mentoring", "Organisational reflection", "Local-language resource"];
-  return <div className="two-column"><section className="panel"><div className="section-title"><div><p className="eyebrow">PRACTICE TRANSFER</p><h2>How could learning be used?</h2></div><span>{evidence.length} excerpts</span></div><div className="excerpt-list">{evidence.map((e: any) => <Excerpt key={e.id} evidence={e} onPromote={() => promote(e)} />)}</div></section><section className="panel"><div className="section-title"><div><p className="eyebrow">SUPPORT BRIDGE</p><h2>What may be needed beyond the course?</h2></div></div><p className="panel-intro">The course should not absorb organisational, resource or programme-level needs. These categories preserve the appropriate response boundary.</p><div className="support-list">{supports.map((s, i) => <div key={s}><span>{String(i + 1).padStart(2, "0")}</span><div><strong>{s}</strong><p>{i < 2 ? "Validate during selected-CSO pilot" : "Later programme / phase"}</p></div><StatusPill tone={i < 2 ? "attention" : "neutral"}>{i < 2 ? 2 : 1} mention(s)</StatusPill></div>)}</div></section></div>;
+  const supportEvidence = reviews.flatMap((r: any) => r.qualitative).filter((e: QualitativeEvidence) => e.kind === "Support Need");
+  return <div className="two-column"><section className="panel"><div className="section-title"><div><p className="eyebrow">PRACTICE TRANSFER</p><h2>How could learning be used?</h2></div><span>{evidence.length} excerpts</span></div><div className="excerpt-list">{evidence.map((e: any) => <Excerpt key={e.id} evidence={e} onPromote={() => promote(e)} />)}{evidence.length === 0 && <Empty title="No transfer evidence received yet" text="Workplace-use and decision-activity excerpts will be retained here when submitted." />}</div></section><section className="panel"><div className="section-title"><div><p className="eyebrow">SUPPORT BRIDGE</p><h2>What may be needed beyond the course?</h2></div></div><p className="panel-intro">The course should not absorb organisational, resource or programme-level needs. These categories preserve the appropriate response boundary.</p><div className="support-list">{supports.map((s, i) => <div key={s}><span>{String(i + 1).padStart(2, "0")}</span><div><strong>{s}</strong><p>{supportEvidence.length ? "Validate after DEC evidence review" : "Waiting for pilot evidence"}</p></div><StatusPill tone={supportEvidence.length ? "attention" : "neutral"}>{supportEvidence.length} mention(s)</StatusPill></div>)}</div></section></div>;
 }
 
 function Findings({ reviews, quick, findings, openDrawer }: any) {
   const explicitReports = reviews.filter((review: FinalReview) => review.possibleBlocker === "yes" || review.possibleBlocker === "not_sure");
-  return <><section className="metric-grid"><Metric label="Quick Findings" value={quick.length} detail="event-level observations; no blocker classification" /><Metric label="Explicit possible-blocker reports" value={explicitReports.length} detail="Final Review yes + not sure" tone="red" /><Metric label="Confirmed blocker findings" value={findings.filter((f: Finding) => f.blockerClassification === "Confirmed blocker").length} detail="DEC analyst classification" tone="amber" /><Metric label="Verified closed" value={findings.filter((f: Finding) => f.status === "Verified Closed").length} detail="visible, not unresolved" tone="green" /></section><section className="panel"><div className="section-title"><div><p className="eyebrow">OBSERVATION STREAM</p><h2>Quick Findings and triage</h2></div><span className="method-note">Exact tester wording · classification requires review</span></div><div className="finding-stream">{quick.map((q: QuickFinding) => <article key={q.id}><div className="finding-meta"><StatusPill tone="neutral">Quick Finding</StatusPill><span>{new Date(q.submittedAt).toLocaleDateString()}</span></div><h3>{q.stableId}</h3><blockquote>{q.whatHappened}</blockquote><p><strong>Recommendation:</strong> {q.recommendation}</p><footer><span>{q.testerId} · {COURSE_LABELS[q.course]}</span><button onClick={() => openDrawer({ title: `${q.id} source record`, rows: [{ id: q.id, meta: "Quick Finding · unclassified observation", text: q.whatHappened, source: q.sourceId }] })}>View source →</button></footer></article>)}</div></section></>;
+  return <><section className="metric-grid"><Metric label="Quick Findings" value={quick.length} detail="event-level observations; no blocker classification" /><Metric label="Explicit possible-blocker reports" value={explicitReports.length} detail="Final Review yes + not sure" tone="red" /><Metric label="Confirmed blocker findings" value={findings.filter((f: Finding) => f.blockerClassification === "Confirmed blocker").length} detail="DEC analyst classification" tone="amber" /><Metric label="Verified closed" value={findings.filter((f: Finding) => f.status === "Verified Closed").length} detail="visible, not unresolved" tone="green" /></section><section className="panel"><div className="section-title"><div><p className="eyebrow">OBSERVATION STREAM</p><h2>Quick Findings and triage</h2></div><span className="method-note">Exact tester wording · classification requires review</span></div><div className="finding-stream">{quick.map((q: QuickFinding) => <article key={q.id}><div className="finding-meta"><StatusPill tone="neutral">Quick Finding</StatusPill><span>{new Date(q.submittedAt).toLocaleDateString()}</span></div><h3>{q.stableId}</h3><blockquote>{q.whatHappened}</blockquote><p><strong>Recommendation:</strong> {q.recommendation}</p><footer><span>{q.testerId} · {COURSE_LABELS[q.course]}</span><button onClick={() => openDrawer({ title: `${q.id} source record`, rows: [{ id: q.id, meta: "Quick Finding · unclassified observation", text: q.whatHappened, source: q.sourceId }] })}>View source →</button></footer></article>)}{quick.length === 0 && <Empty title="No Quick Findings received yet" text="Submitted event-level observations will appear here for DEC triage." />}</div></section></>;
 }
 
 function Actions({ findings, save }: { findings: Finding[]; save: (f: Finding) => void }) {
   const [expanded, setExpanded] = useState<string | null>(findings[0]?.id ?? null);
   const statuses: FindingStatus[] = ["New", "Under Review", "Action Agreed", "In Progress", "Ready for Verification", "Verified Closed", "Not an Issue"];
-  return <section className="panel"><div className="section-title"><div><p className="eyebrow">OPERATIONAL DECISION WORKSPACE</p><h2>Finding-to-Action register</h2></div><span>{findings.length} findings</span></div><div className="action-table"><div className="action-head"><span>Finding</span><span>Severity</span><span>Decision Horizon</span><span>Owner</span><span>Status</span><span /></div>{findings.map((f) => <div className={`action-row ${expanded === f.id ? "expanded" : ""}`} key={f.id}><div><strong>{f.id} · {f.domain}</strong><small>{COURSE_LABELS[f.course]} · {f.findingType}</small></div><StatusPill tone={f.severity === "Critical" ? "critical" : f.severity === "High" ? "attention" : "neutral"}>{f.severity}</StatusPill><span>{f.decisionHorizon}</span><span>{f.owner || "Unassigned"}</span><label className="sr-label">Status for {f.id}<select value={f.status} onChange={(e) => save({ ...f, status: e.target.value as FindingStatus, history: [...f.history, { at: new Date().toISOString(), event: `Status changed to ${e.target.value}` }] })}>{statuses.map((s) => <option key={s}>{s}</option>)}</select></label><button className="expand-button" onClick={() => setExpanded(expanded === f.id ? null : f.id)} aria-expanded={expanded === f.id}>{expanded === f.id ? "−" : "+"}</button>{expanded === f.id && <div className="action-detail"><dl><div><dt>Evidence</dt><dd>{f.evidence}</dd></div><div><dt>Interpretation</dt><dd>{f.interpretation}</dd></div><div><dt>Recommended action</dt><dd>{f.recommendedAction}</dd></div><div><dt>Source record IDs</dt><dd>{f.sourceRecordIds.join(", ")}</dd></div><div><dt>Pattern / recurrence</dt><dd>{f.recurrence}</dd></div><div><dt>Blocker classification</dt><dd>{f.blockerClassification}</dd></div><div><dt>Response area</dt><dd>{f.responseArea}</dd></div><div><dt>Target timing</dt><dd>{f.targetTiming}</dd></div></dl><label>Verification / result<textarea value={f.verification} placeholder="Record the recheck evidence before closing." onChange={(e) => save({ ...f, verification: e.target.value })} /></label><div className="history"><strong>History</strong>{f.history.map((h, i) => <p key={i}><time>{new Date(h.at).toLocaleString()}</time>{h.event}</p>)}</div></div>}</div>)}</div></section>;
+  return <section className="panel"><div className="section-title"><div><p className="eyebrow">OPERATIONAL DECISION WORKSPACE</p><h2>Finding-to-Action register</h2></div><span>{findings.length} findings</span></div>{findings.length === 0 ? <Empty title="No findings-to-action records yet" text="DEC findings remain separate from raw observations and will be created only after evidence review." /> : <div className="action-table"><div className="action-head"><span>Finding</span><span>Severity</span><span>Decision Horizon</span><span>Owner</span><span>Status</span><span /></div>{findings.map((f) => <div className={`action-row ${expanded === f.id ? "expanded" : ""}`} key={f.id}><div><strong>{f.id} · {f.domain}</strong><small>{COURSE_LABELS[f.course]} · {f.findingType}</small></div><StatusPill tone={f.severity === "Critical" ? "critical" : f.severity === "High" ? "attention" : "neutral"}>{f.severity}</StatusPill><span>{f.decisionHorizon}</span><span>{f.owner || "Unassigned"}</span><label className="sr-label">Status for {f.id}<select value={f.status} onChange={(e) => save({ ...f, status: e.target.value as FindingStatus, history: [...f.history, { at: new Date().toISOString(), event: `Status changed to ${e.target.value}` }] })}>{statuses.map((s) => <option key={s}>{s}</option>)}</select></label><button className="expand-button" onClick={() => setExpanded(expanded === f.id ? null : f.id)} aria-expanded={expanded === f.id}>{expanded === f.id ? "−" : "+"}</button>{expanded === f.id && <div className="action-detail"><dl><div><dt>Evidence</dt><dd>{f.evidence}</dd></div><div><dt>Interpretation</dt><dd>{f.interpretation}</dd></div><div><dt>Recommended action</dt><dd>{f.recommendedAction}</dd></div><div><dt>Source record IDs</dt><dd>{f.sourceRecordIds.join(", ")}</dd></div><div><dt>Pattern / recurrence</dt><dd>{f.recurrence}</dd></div><div><dt>Blocker classification</dt><dd>{f.blockerClassification}</dd></div><div><dt>Response area</dt><dd>{f.responseArea}</dd></div><div><dt>Target timing</dt><dd>{f.targetTiming}</dd></div></dl><label>Verification / result<textarea value={f.verification} placeholder="Record the recheck evidence before closing." onChange={(e) => save({ ...f, verification: e.target.value })} /></label><div className="history"><strong>History</strong>{f.history.map((h, i) => <p key={i}><time>{new Date(h.at).toLocaleString()}</time>{h.event}</p>)}</div></div>}</div>)}</div>}</section>;
 }
 
 function Qualitative({ reviews, promote }: any) {
@@ -237,21 +241,21 @@ function Qualitative({ reviews, promote }: any) {
   return <section className="panel"><div className="section-title"><div><p className="eyebrow">EXACT SOURCE EXCERPTS</p><h2>Qualitative Evidence Explorer</h2></div><span>{evidence.length} excerpts</span></div><div className="evidence-tools"><label>Search comments<input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tester wording…" /></label><label>Evidence view<select value={kind} onChange={(e) => setKind(e.target.value)}><option value="all">All qualitative evidence</option>{kinds.map((x) => <option key={x}>{x}</option>)}</select></label></div><div className="evidence-tabs">{["all", ...kinds].map((x) => <button className={kind === x ? "active" : ""} key={x} onClick={() => setKind(x)}>{x === "all" ? "All evidence" : x}</button>)}</div><div className="excerpt-grid">{evidence.map((e) => <Excerpt key={e.id} evidence={e} onPromote={() => promote(e)} />)}{evidence.length === 0 && <Empty title="No matching excerpts" text="Try clearing the search or changing the evidence view." />}</div></section>;
 }
 
-function Readiness({ signals, findings, liveMode }: any) {
+function Readiness({ signals, findings, realMode }: any) {
   const [decisions, setDecisions] = useState<HumanReadinessDecision[]>([]);
   const [saved, setSaved] = useState<Course | null>(null);
   const update = (course: Course, patch: Partial<HumanReadinessDecision>) => setDecisions((current) => { const found = current.find((d) => d.course === course) ?? { course, decision: "INSUFFICIENT EVIDENCE - NEED MORE TESTING", reason: "", owner: "", date: "" } as HumanReadinessDecision; return [...current.filter((d) => d.course !== course), { ...found, ...patch }]; });
   const persist = async (decision: HumanReadinessDecision) => {
-    if (liveMode) { const response = await fetch("/api/readiness", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(decision) }); if (!response.ok) return; }
+    if (realMode) { const response = await fetch("/api/readiness", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(decision) }); if (!response.ok) return; }
     else window.localStorage.setItem(`dec-readiness-${decision.course}`, JSON.stringify(decision));
     setSaved(decision.course);
   };
   return <div className="readiness-record">{signals.map((s: any) => { const human = decisions.find((d) => d.course === s.course); const history = findings.filter((f: Finding) => f.course === s.course && f.severity === "Critical"); return <section className="panel" key={s.course}><div className="readiness-record-head"><div><span className="system-mark">{s.course === "hub" ? "LH" : s.course.toUpperCase()}</span><div><p className="eyebrow">{s.label}</p><h2>Evidence signal</h2></div></div><StatusPill>{s.decision}</StatusPill></div><p className="signal-reason">{s.reason}</p><div className="signal-stats"><div><span>Final Reviews</span><strong>{s.finalReviews}</strong></div><div><span>Unresolved critical</span><strong>{s.unresolvedCritical}</strong></div><div><span>Historical blockers</span><strong>{s.historicalBlockers}</strong></div><div><span>Critical gaps</span><strong>{s.criticalGaps.length}</strong></div><div><span>High actions due</span><strong>{s.highActions}</strong></div></div>{s.criticalGaps.length > 0 && <div className="gap-list"><strong>Critical evidence still needed</strong><p>{s.criticalGaps.join(" · ")}</p></div>}<div className="history-strip"><strong>Critical history</strong>{history.map((f: Finding) => <span key={f.id}><StatusPill tone={f.status === "Verified Closed" ? "positive" : "critical"}>{f.status}</StatusPill>{f.id} · {f.domain}</span>)}{history.length === 0 && <span>No critical finding has been recorded.</span>}</div><form className="decision-form" onSubmit={(e) => e.preventDefault()}><div className="form-title"><div><p className="eyebrow">HUMAN DECISION · SEPARATE RECORD</p><h3>DEC final readiness decision</h3></div><StatusPill tone="neutral">Not automated</StatusPill></div><label>Final readiness decision<select value={human?.decision ?? ""} onChange={(e) => update(s.course, { decision: e.target.value as HumanReadinessDecision["decision"] })}><option value="">Select after DEC review</option>{READINESS_DECISIONS.map((d) => <option key={d}>{d}</option>)}</select></label><label>Main reason<textarea value={human?.reason ?? ""} onChange={(e) => update(s.course, { reason: e.target.value })} placeholder="Record the evidence-based reason for DEC’s decision." /></label><div className="form-row"><label>Decision owner / group<input value={human?.owner ?? ""} onChange={(e) => update(s.course, { owner: e.target.value })} /></label><label>Decision date<input type="date" value={human?.date ?? ""} onChange={(e) => update(s.course, { date: e.target.value })} /></label></div><button className="primary-button" onClick={() => human && void persist(human)} disabled={!human?.decision || !human.reason || !human.owner || !human.date}>{saved === s.course ? "Decision record saved" : "Save decision record"}</button></form></section>; })}</div>;
 }
 
-function DecisionHorizon({ findings }: { findings: Finding[] }) {
+function DecisionHorizon({ findings, routePrefix }: { findings: Finding[]; routePrefix: string }) {
   const max = Math.max(...DECISION_HORIZONS.map((h) => findings.filter((f) => f.decisionHorizon === h).length), 1);
-  return <article className="panel"><div className="section-title"><div><p className="eyebrow">ACTION TIMING</p><h2>Decision Horizon</h2></div><Link href="/actions">Open workspace →</Link></div><div className="horizon-chart">{DECISION_HORIZONS.map((h, i) => { const count = findings.filter((f) => f.decisionHorizon === h).length; return <div key={h}><span>{h}</span><div><i className={`horizon-${i}`} style={{ width: `${Math.max((count / max) * 100, count ? 8 : 0)}%` }} /></div><strong>{count}</strong></div>; })}</div></article>;
+  return <article className="panel"><div className="section-title"><div><p className="eyebrow">ACTION TIMING</p><h2>Decision Horizon</h2></div><Link href={`${routePrefix}/actions`}>Open workspace →</Link></div><div className="horizon-chart">{DECISION_HORIZONS.map((h, i) => { const count = findings.filter((f) => f.decisionHorizon === h).length; return <div key={h}><span>{h}</span><div><i className={`horizon-${i}`} style={{ width: `${Math.max((count / max) * 100, count ? 8 : 0)}%` }} /></div><strong>{count}</strong></div>; })}</div></article>;
 }
 
 function Excerpt({ evidence, onPromote }: { evidence: QualitativeEvidence; onPromote: () => void }) {
