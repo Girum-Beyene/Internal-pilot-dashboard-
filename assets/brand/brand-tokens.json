@@ -1,0 +1,15 @@
+{
+  "brand": "Development Expertise Center (DEC)",
+  "colors": {
+    "decBlue": "#3B99D4",
+    "teal": "#0F8F8C",
+    "green": "#91C852",
+    "deepNavy": "#0F172A",
+    "paleMint": "#EAF7EF",
+    "lightNeutral": "#F8FAFC",
+    "amberAttention": "#F59E0B",
+    "text": "#111827"
+  },
+  "logo": "dec-logo.png",
+  "partnersLogoStrip": "LOGO_STRIP_P_MED.png"
+}

@@ -1,0 +1,16 @@
+{
+  "count": 2,
+  "next": "https://kf.example/api/v2/assets/QUICK/data/?limit=1&start=1",
+  "previous": null,
+  "results": [{
+    "_id": 80503,
+    "_uuid": "sample-quick-pm-1",
+    "_submission_time": "2026-08-18T14:55:00Z",
+    "_last_edited": "2026-08-18T15:02:00Z",
+    "tester_id": "SAMPLE-T-11",
+    "observation_location": "pm",
+    "stable_id": "Risk activity / PM-M4-A3",
+    "what_happened": "SAMPLE: progression remained locked after the apparently valid choice.",
+    "recommendation": "Check answer mapping and diagnostic feedback."
+  }]
+}

@@ -1,0 +1,73 @@
+{
+  "repo": "DEC Internal Pilot Analytics Dashboard - Initial Repository",
+  "created_date": "2026-08-18",
+  "source_file_count": 12,
+  "current_authoritative_form_version": "20260819_v2_1",
+  "current_authoritative_forms": [
+    "forms/DEC_Internal_Pilot_Quick_Finding_XLSForm_v2_1_20260819.xlsx",
+    "forms/DEC_Internal_Pilot_Final_Course_Review_XLSForm_v2_1_20260819.xlsx"
+  ],
+  "files": [
+    {
+      "path": "docs/DEC_Internal_Pilot_Implementation_and_Course_Validation_Guide.docx",
+      "bytes": 61663,
+      "sha256": "523b804ca9c2381b2c27b6aa64525c9245c8c3fcadfaac6d610830dba68023af"
+    },
+    {
+      "path": "docs/DEC_Internal_Pilot_Quick_Reference.docx",
+      "bytes": 41691,
+      "sha256": "315e95590d1433fa8cc0fde3ee583b3c75699799706c125d3111e1a81ad7042e"
+    },
+    {
+      "path": "docs/Annex_A_HRBA_Capacity_to_Action_Needs_Analysis_and_Design_Framework.docx",
+      "bytes": 58237,
+      "sha256": "ccf44763f01e43e1785ce9a67c39f71f421980e786decb7dd6589c4fc414ec0f"
+    },
+    {
+      "path": "docs/Annex_B_Project_Management_Capacity_to_Action_Design_Brief.docx",
+      "bytes": 50972,
+      "sha256": "4cc7532feb6ee07fc891ddfa212f63eb37eb7ce2ac66008c281f287ce83fee95"
+    },
+    {
+      "path": "forms/I_Internal_Pilot_Review_XLSForm.xlsx",
+      "bytes": 21277,
+      "sha256": "688c1503ecb41a76cf8cfba775f4575d087c6cc4f7a87b4e7b54f178199ab00e"
+    },
+    {
+      "path": "forms/II_Quick_Finding_Form_Internal_Pilot_XLSForm.xlsx",
+      "bytes": 7217,
+      "sha256": "40983c066ebd595dca7bc871fc587f3cd5e0d6a758fa1012cd8b3768a2c9e7b1"
+    },
+    {
+      "path": "forms/DEC_Internal_Pilot_Final_Course_Review_XLSForm_v2_1_20260819.xlsx",
+      "bytes": 23200,
+      "sha256": "6f6fce4ba7c8dc8eb882d57c51fe202322d622fa2fac6f94df7dcf2eb10c413d"
+    },
+    {
+      "path": "forms/DEC_Internal_Pilot_Quick_Finding_XLSForm_v2_1_20260819.xlsx",
+      "bytes": 6758,
+      "sha256": "9f0aa4db238500425e0290a747e223dff156d2275cee56ff45e2833492d15fc1"
+    },
+    {
+      "path": "analysis/DEC_Internal_Pilot_Analysis_Action.xlsx",
+      "bytes": 118500,
+      "sha256": "d1228fbdf30c5e2af64df8257db87c26b8396ec921b8bd49ca6a72fb871efd77"
+    },
+    {
+      "path": "analysis/DEC_Internal_Pilot_Coordination_Tracker.xlsx",
+      "bytes": 14354,
+      "sha256": "1a405c0e0b2a54da82565f1978bf2596db443a50ca6f576905129b17dc893083"
+    },
+    {
+      "path": "assets/brand/dec-logo.png",
+      "bytes": 40974,
+      "sha256": "e84f4d0583612cd302151129eb18d283b2d0bbb07f4b70b5d60992b9aaba7bbb"
+    },
+    {
+      "path": "assets/brand/LOGO_STRIP_P_MED.png",
+      "bytes": 163053,
+      "sha256": "9d84d6538ca3057c7b3b1534194d2d88db9e7223212ddd0c1ec55ddca0066940"
+    }
+  ],
+  "note": "Hashes cover the package source files and brand assets. The dated v2.1 XLSForms are current authoritative pilot instruments; the original v2.0 XLSForms remain immutable historical traceability records."
+}

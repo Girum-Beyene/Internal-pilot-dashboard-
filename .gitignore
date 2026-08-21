@@ -1,0 +1,45 @@
+# Secrets
+.env
+.env.local
+.env.*
+.env.*.local
+**/.env
+**/.env.*
+
+# Supabase CLI state and secret-bearing local configuration
+.supabase/
+**/.supabase/
+supabase/.temp/
+*.supabase.env
+*service-role*.json
+*.secret
+*.secrets
+*.key
+*.p12
+*.pfx
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+coverage/
+
+# Logs
+*.log
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local data / exports / temporary sync payloads
+.local-data/
+exports/
+*.sqlite
+*.db
+
+# Do not commit secrets or real raw pilot-data dumps
+secrets/
+raw-pilot-data/
