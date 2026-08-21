@@ -1,6 +1,15 @@
 # LIVE ACTIVATION GATE — 21 August 2026
 
-**Decision: DO NOT ACTIVATE LIVE MODE.** `NEXT_PUBLIC_DATA_MODE` remains `sample`; no Vercel project was linked or deployed and no production data was changed. Public Kobo server, asset and web-form identifiers are recorded in `.env.example`. Authenticated verification used the privately configured token only in memory; no token or authorization header was printed or stored in project files.
+**Current operational status: LIVE RUNTIME CONFIGURED; CONTROLLED REHEARSAL PENDING.** Production `NEXT_PUBLIC_DATA_MODE` is `live`; the public real dashboard remains empty until authenticated Kobo submissions are received. `/simulation` remains a separately routed synthetic dataset. No secret or authorization value is recorded in this file.
+
+## 21 August 2026 operational activation update
+
+- Verified the required Vercel account (`tbeyene972-6860`), team (`internal-pilot-dashboard`) and linked Production project before configuration.
+- Verified both deployed EU Kobo v2.1 assets by their locked UIDs. Each now has one active JSON REST Service using Basic authentication and targeting only its approved Production ingestion route: Quick Finding → `/api/kobo/rest/quick`; Final Review → `/api/kobo/rest/review`.
+- Created/rotated the REST credentials directly into the Production Vercel environment as sensitive variables and patched both Kobo service settings in the same private process. Values were neither displayed nor committed.
+- Pushed the Production configuration activation through `main`; Vercel automatically deployed it successfully to the Production aliases.
+- Production smoke check PASS: public real route returns its zero-evidence shell with no fixture record; `/simulation` retains its simulation banner; desktop and 390px mobile widths have no horizontal overflow or browser runtime errors. The service-role `dec_pilot` path returns HTTP 200 and all four live-ingestion tables checked are presently empty.
+- Controlled data submission, attachment verification, reconciliation-after-edit, duplicate verification and dashboard evidence confirmation remain pending because both deployed Enketo URLs redirect to the Kobo interactive sign-in page. The server API token cannot be used as an Enketo browser session. A human Kobo sign-in is required to complete the normal-form rehearsal.
 
 ## Frozen baseline
 
