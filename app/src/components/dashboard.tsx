@@ -39,6 +39,7 @@ type DrawerRow = { id: string; meta: string; text: string; source?: string };
 type Filters = { course: "all" | Course; device: string; internet: string; practical: string; rating: string; horizon: string };
 
 const emptyFilters: Filters = { course: "all", device: "all", internet: "all", practical: "all", rating: "all", horizon: "all" };
+const SIMULATION_FINDINGS_STORAGE_KEY = "dec-pilot-simulation-findings-v2";
 
 function toneForDecision(value: string) {
   if (value.startsWith("HOLD") || value.includes("BLOCKED") || value === "FAIL") return "critical";
@@ -88,7 +89,7 @@ export default function Dashboard({ view, mode, initialEvidence = emptyDashboard
         setSync({ state: data.lastSync?.status === "success" ? "Evidence store checked" : "Waiting for submissions", time: data.lastSync?.completed_at ? new Date(data.lastSync.completed_at).toLocaleString() : "No pilot evidence received yet" });
       }).catch(() => setSync({ state: "Waiting for submissions", time: "No pilot evidence received yet" }));
     } else {
-      const stored = window.localStorage.getItem("dec-pilot-simulation-findings");
+      const stored = window.localStorage.getItem(SIMULATION_FINDINGS_STORAGE_KEY);
       if (stored) try { setFindings(JSON.parse(stored)); } catch { /* ignore invalid local development state */ }
     }
   }, [simulation]);
@@ -96,7 +97,7 @@ export default function Dashboard({ view, mode, initialEvidence = emptyDashboard
   const saveFindings = (next: Finding[]) => {
     setFindings(next);
     if (!simulation) void fetch("/api/findings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next), keepalive: true });
-    else window.localStorage.setItem("dec-pilot-simulation-findings", JSON.stringify(next));
+    else window.localStorage.setItem(SIMULATION_FINDINGS_STORAGE_KEY, JSON.stringify(next));
   };
 
   const reviews = useMemo(() => sourceReviews.filter((r) =>

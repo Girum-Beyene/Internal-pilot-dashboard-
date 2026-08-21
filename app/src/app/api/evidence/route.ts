@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ACTION_DECISIONS, Finding, FinalReview, PracticalResult, QualityRating, QuickFinding, READINESS_DECISIONS, QualitativeEvidence } from "@/lib/evidence-model";
 import { currentFinalReviews } from "@/lib/analytics";
 import { authorizedInternal } from "@/lib/server/auth";
+import { partitionPilotRows } from "@/lib/server/pilot-evidence-eligibility";
 import { getRows } from "@/lib/server/supabase-rest";
 
 const practicalMap: Record<string, PracticalResult> = { pass: "PASS", pass_issue: "PASS WITH ISSUE", fail: "FAIL", not_tested: "NOT TESTED" };
@@ -19,7 +20,10 @@ export async function GET(request: NextRequest) {
     const [reviewRows, practicalRows, qualityRows, textRows, quickRows, findingRows, sourceRows, syncRows] = await Promise.all([
       getRows("final_reviews"), getRows("practical_checks"), getRows("quality_ratings"), getRows("qualitative_evidence"), getRows("quick_findings"), getRows("findings"), getRows("finding_sources"), getRows("sync_runs", "select=completed_at,status,error_message&order=completed_at.desc&limit=1"),
     ]);
-    const allReviews: FinalReview[] = reviewRows.map((r: any) => {
+    const reviewPartition = partitionPilotRows(reviewRows);
+    const quickPartition = partitionPilotRows(quickRows);
+    const excludedSourceIds = new Set([...reviewPartition.excluded, ...quickPartition.excluded].map((row: any) => String(row.source_submission_id)));
+    const allReviews: FinalReview[] = reviewPartition.included.map((r: any) => {
       const id = String(r.source_submission_id);
       const course = r.course as "hrba" | "pm";
       const qualitative: QualitativeEvidence[] = textRows.filter((x: any) => x.source_asset_uid === r.source_asset_uid && x.source_submission_id === r.source_submission_id).map((x: any) => ({ id: String(x.id), reviewId: id, testerId: String(x.tester_id ?? r.tester_id), course, kind: evidenceKinds.has(x.evidence_type) ? x.evidence_type : "Recommendation", domain: x.domain, sourceField: x.source_field, excerpt: x.excerpt }));
@@ -29,8 +33,13 @@ export async function GET(request: NextRequest) {
         possibleBlocker: r.possible_blocker, actionRecommendation: actionMap[r.action_recommendation] ?? "Investigate Further", readinessRecommendation: readinessMap[r.readiness_recommendation] ?? "INSUFFICIENT EVIDENCE - NEED MORE TESTING" };
     });
     const reviews = currentFinalReviews(allReviews);
-    const quick: QuickFinding[] = quickRows.map((q: any) => ({ id: String(q.source_submission_id), sourceId: String(q.source_submission_id), submittedAt: q.submitted_at, testerId: q.tester_id, course: q.observation_location, stableId: q.stable_id, whatHappened: q.what_happened, recommendation: q.recommendation, screenshot: q.screenshot_ref }));
-    const findings: Finding[] = findingRows.map((f: any) => ({ id: f.finding_id, course: f.course_hub, domain: f.domain, evidence: f.evidence, sourceRecordIds: sourceRows.filter((s: any) => s.finding_id === f.id).map((s: any) => s.source_record_id), recordCount: f.evidence_count, recurrence: f.recurrence, severity: f.severity, blockerClassification: f.blocker_classification, interpretation: f.interpretation, actionDecision: f.action_decision, recommendedAction: f.recommended_action, priority: f.priority, owner: f.responsible_person_unit, targetTiming: f.target_timing, status: f.status, verification: f.verification_result, responseArea: f.response_area, findingType: f.finding_type, decisionHorizon: f.decision_horizon, history: [] }));
+    const quick: QuickFinding[] = quickPartition.included.map((q: any) => ({ id: String(q.source_submission_id), sourceId: String(q.source_submission_id), submittedAt: q.submitted_at, testerId: q.tester_id, course: q.observation_location, stableId: q.stable_id, whatHappened: q.what_happened, recommendation: q.recommendation, screenshot: q.screenshot_ref }));
+    const findings: Finding[] = findingRows.flatMap((f: any) => {
+      const linkedSources = sourceRows.filter((s: any) => s.finding_id === f.id).map((s: any) => String(s.source_record_id));
+      const eligibleLinkedSources = linkedSources.filter((sourceId: string) => !excludedSourceIds.has(sourceId));
+      if (linkedSources.length > 0 && eligibleLinkedSources.length === 0) return [];
+      return [{ id: f.finding_id, course: f.course_hub, domain: f.domain, evidence: f.evidence, sourceRecordIds: eligibleLinkedSources, recordCount: linkedSources.length > 0 ? eligibleLinkedSources.length : f.evidence_count, recurrence: f.recurrence, severity: f.severity, blockerClassification: f.blocker_classification, interpretation: f.interpretation, actionDecision: f.action_decision, recommendedAction: f.recommended_action, priority: f.priority, owner: f.responsible_person_unit, targetTiming: f.target_timing, status: f.status, verification: f.verification_result, responseArea: f.response_area, findingType: f.finding_type, decisionHorizon: f.decision_horizon, history: [] }];
+    });
     return NextResponse.json({ reviews, quick, findings, sample: false, archivedReviewVersions: allReviews.length - reviews.length, lastSync: syncRows[0] ?? null });
   } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Evidence read failed" }, { status: 503 }); }
 }

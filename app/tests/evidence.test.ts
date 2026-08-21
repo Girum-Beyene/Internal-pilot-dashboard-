@@ -51,15 +51,15 @@ test("keeps Hub, HRBA and PM readiness separate", () => {
   assert.equal(signals.length, 3);
   assert.equal(signals.find((x) => x.course === "pm")?.decision, "HOLD - CORRECT IMPORTANT ISSUE(S) FIRST");
   assert.equal(signals.find((x) => x.course === "hrba")?.decision, "READY WITH MINOR IMPROVEMENTS");
-  assert.equal(signals.find((x) => x.course === "hub")?.decision, "INSUFFICIENT EVIDENCE - NEED MORE TESTING");
+  assert.equal(signals.find((x) => x.course === "hub")?.decision, "READY WITH MINOR IMPROVEMENTS");
 });
 
 test("verified closure removes a blocker from unresolved counts but not history", () => {
-  const closed = SAMPLE_FINDINGS.map((f) => f.id === "F-003" ? { ...f, status: "Verified Closed" as const, verification: "Independent retest passed." } : f);
+  const closed = SAMPLE_FINDINGS.map((f) => f.id === "SIM-F-003" ? { ...f, status: "Verified Closed" as const, verification: "Independent retest passed." } : f);
   const signal = readinessSignal("pm", SAMPLE_REVIEWS, closed);
   assert.equal(signal.unresolvedCritical, 0);
   assert.ok(signal.historicalBlockers > 0);
-  assert.equal(signal.decision, "INSUFFICIENT EVIDENCE - NEED MORE TESTING");
+  assert.equal(signal.decision, "READY WITH MINOR IMPROVEMENTS");
 });
 
 test("repeated normalization uses the same stable conflict identity for edited records", () => {
