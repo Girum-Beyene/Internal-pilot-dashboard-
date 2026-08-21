@@ -9,7 +9,14 @@
 - Created/rotated the REST credentials directly into the Production Vercel environment as sensitive variables and patched both Kobo service settings in the same private process. Values were neither displayed nor committed.
 - Pushed the Production configuration activation through `main`; Vercel automatically deployed it successfully to the Production aliases.
 - Production smoke check PASS: public real route returns its zero-evidence shell with no fixture record; `/simulation` retains its simulation banner; desktop and 390px mobile widths have no horizontal overflow or browser runtime errors. The service-role `dec_pilot` path returns HTTP 200 and all four live-ingestion tables checked are presently empty.
-- Controlled data submission, attachment verification, reconciliation-after-edit, duplicate verification and dashboard evidence confirmation remain pending because both deployed Enketo URLs redirect to the Kobo interactive sign-in page. The server API token cannot be used as an Enketo browser session. A human Kobo sign-in is required to complete the normal-form rehearsal.
+- Controlled data submission, attachment verification, reconciliation-after-edit, duplicate verification and dashboard evidence confirmation were pending before Kobo public-submission access was enabled; the subsequent browser-form result is recorded below.
+
+## Controlled live rehearsal result — 21 August 2026
+
+- Kobo public-submission access was subsequently enabled and the Quick Finding web form was submitted through its normal browser flow with a harmless PNG attachment. Kobo assigned `_id` `811536188`; the configured Quick REST Service recorded a single successful delivery (HTTP 202, one try), and `dec_pilot.raw_kobo_submissions` plus `dec_pilot.quick_findings` contain one record for the locked Quick asset UID. Screenshot metadata is retained in `quick_findings.screenshot_ref`.
+- This is **not an acceptable completed pilot record**: the deployed Quick form ignored its documented `d[tester_id]` URL prefill, displayed its own identity-missing warning, and serialized `tester_id` as null. The controlled observation, location, recommendation, stable Kobo `_id`, and attachment metadata are present, but stable tester identity is not.
+- The deployed Final Review web form was independently checked with the documented `d[tester_id]` and `d[course]` parameters. It displayed its identity/course-missing warning and did not receive either hidden value. No Final Review was submitted, because doing so would create invalid readiness evidence.
+- Consequently, do not treat this as a completed end-to-end rehearsal. Do not submit additional pilot evidence through these web-form URLs until the Kobo prefill behavior is corrected and the corrected deployment is reverified. The controlled Quick record is retained and clearly identifiable for auditability; no deletion was attempted.
 
 ## Frozen baseline
 
